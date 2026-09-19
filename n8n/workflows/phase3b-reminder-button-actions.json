@@ -1,0 +1,225 @@
+{
+  "name": "Phase 3b - Reminder Button Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Replace YOUR_AIRTABLE_BASE_ID in both Airtable nodes.\n2. Set Airtable + Telegram credentials.\n3. This listens for taps on the Done/Snooze/Reassign buttons sent by\n   phase3a. \"Reassign\" sends a second inline keyboard of category options;\n   tapping one routes back through this same workflow via the\n   `category:<recordId>:<name>` callback_data prefix.\n4. Airtable's \"update\" node UI varies by version — if the field mapping\n   looks wrong after import, just re-map \"id\" and the target field in the\n   node UI.",
+        "height": 280,
+        "width": 400
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-300, -160]
+    },
+    {
+      "parameters": { "updates": ["callback_query"] },
+      "id": "trigger1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 0],
+      "webhookId": "phase3b-reminder-button-actions",
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.callback_query.data;\nconst parts = data.split(':');\nreturn [{\n  json: {\n    action: parts[0],\n    recordId: parts[1],\n    categoryName: parts[2] || null,\n    chatId: $input.first().json.callback_query.message.chat.id,\n    messageId: $input.first().json.callback_query.message.message_id,\n    callbackQueryId: $input.first().json.callback_query.id\n  }\n}];"
+      },
+      "id": "code1",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "done", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "done" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "snooze", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "snooze" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "reassign", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "reassign" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "category", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "category" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch1",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [680, 0]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Status": "Closed"
+          }
+        }
+      },
+      "id": "airtable_done",
+      "name": "Mark Closed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [960, -220],
+      "credentials": {
+        "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "get",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "id": "={{ $json.recordId }}"
+      },
+      "id": "airtable_get",
+      "name": "Get Current Due Date",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [960, -60],
+      "credentials": {
+        "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const current = $json.fields['Due date'];\nconst d = current ? new Date(current) : new Date();\nd.setDate(d.getDate() + 1);\nreturn [{ json: { recordId: $json.id, newDueDate: d.toISOString().slice(0, 10) } }];"
+      },
+      "id": "code_snooze",
+      "name": "Add One Day",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, -60]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Due date": "={{ $json.newDueDate }}"
+          }
+        }
+      },
+      "id": "airtable_snooze",
+      "name": "Push Due Date",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1400, -60],
+      "credentials": {
+        "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Callback').item.json.chatId }}",
+        "text": "Which category?",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "Project", "additionalFields": { "callback_data": "=category:{{ $('Parse Callback').item.json.recordId }}:Project" } },
+                  { "text": "Finance", "additionalFields": { "callback_data": "=category:{{ $('Parse Callback').item.json.recordId }}:Finance" } },
+                  { "text": "Procurement", "additionalFields": { "callback_data": "=category:{{ $('Parse Callback').item.json.recordId }}:Procurement" } }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  { "text": "Engineering", "additionalFields": { "callback_data": "=category:{{ $('Parse Callback').item.json.recordId }}:Engineering" } },
+                  { "text": "Personal", "additionalFields": { "callback_data": "=category:{{ $('Parse Callback').item.json.recordId }}:Personal" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_reassign",
+      "name": "Ask New Category",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [960, 100],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.recordId }}",
+            "Category": "={{ [$json.categoryName] }}"
+          }
+        }
+      },
+      "id": "airtable_category",
+      "name": "Set New Category",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [960, 260],
+      "credentials": {
+        "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Callback').item.json.chatId }}",
+        "text": "✅ Updated.",
+        "additionalFields": {}
+      },
+      "id": "telegram_confirm",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1620, 0],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": { "main": [[{ "node": "Parse Callback", "type": "main", "index": 0 }]] },
+    "Parse Callback": { "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]] },
+    "Route by Action": {
+      "main": [
+        [{ "node": "Mark Closed", "type": "main", "index": 0 }],
+        [{ "node": "Get Current Due Date", "type": "main", "index": 0 }],
+        [{ "node": "Ask New Category", "type": "main", "index": 0 }],
+        [{ "node": "Set New Category", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Closed": { "main": [[{ "node": "Confirm", "type": "main", "index": 0 }]] },
+    "Get Current Due Date": { "main": [[{ "node": "Add One Day", "type": "main", "index": 0 }]] },
+    "Add One Day": { "main": [[{ "node": "Push Due Date", "type": "main", "index": 0 }]] },
+    "Push Due Date": { "main": [[{ "node": "Confirm", "type": "main", "index": 0 }]] },
+    "Set New Category": { "main": [[{ "node": "Confirm", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

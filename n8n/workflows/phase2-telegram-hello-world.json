@@ -1,0 +1,54 @@
+{
+  "name": "Phase 2 - Telegram Hello World",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Create a Telegram credential in n8n using your bot token from @BotFather.\n2. Select that credential on both Telegram nodes below.\n3. Activate this workflow, then message your bot — it should echo you back.",
+        "height": 220,
+        "width": 320
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "trigger1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 0],
+      "webhookId": "phase2-telegram-hello-world",
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "=Echo: {{ $json.message.text }}",
+        "additionalFields": {}
+      },
+      "id": "send1",
+      "name": "Send Echo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [460, 0],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Send Echo", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

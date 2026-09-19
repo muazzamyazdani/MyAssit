@@ -1,0 +1,52 @@
+{
+  "tableName": "Tasks",
+  "description": "Personal PM Task Agent - Tasks table",
+  "fields": [
+    { "name": "Task name", "type": "singleLineText" },
+    {
+      "name": "Category",
+      "type": "multipleSelects",
+      "options": {
+        "choices": [
+          { "name": "Project" },
+          { "name": "Finance" },
+          { "name": "Procurement" },
+          { "name": "Engineering" },
+          { "name": "Personal" }
+        ]
+      }
+    },
+    { "name": "Project tag", "type": "singleLineText" },
+    {
+      "name": "Status",
+      "type": "singleSelect",
+      "options": {
+        "choices": [
+          { "name": "Open" },
+          { "name": "In progress" },
+          { "name": "Waiting on reply" },
+          { "name": "Closed" }
+        ]
+      }
+    },
+    {
+      "name": "Source",
+      "type": "singleSelect",
+      "options": {
+        "choices": [
+          { "name": "Manual" },
+          { "name": "Email" },
+          { "name": "MOM/screenshot" },
+          { "name": "WhatsApp" }
+        ]
+      }
+    },
+    { "name": "Due date", "type": "date", "options": { "dateFormat": { "name": "iso" } } },
+    { "name": "Contact name", "type": "singleLineText" },
+    { "name": "Contact phone", "type": "phoneNumber" },
+    { "name": "Contact email", "type": "email" },
+    { "name": "Notes", "type": "multilineText" },
+    { "name": "Last reminded", "type": "date", "options": { "dateFormat": { "name": "iso" } } },
+    { "name": "Call outcome", "type": "singleLineText" }
+  ]
+}

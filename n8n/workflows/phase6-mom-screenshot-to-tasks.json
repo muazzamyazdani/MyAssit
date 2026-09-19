@@ -1,0 +1,295 @@
+{
+  "name": "Phase 6 - MOM/Screenshot to Tasks",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Connect Telegram + Airtable credentials, set OPENAI_API_KEY, replace\n   YOUR_AIRTABLE_BASE_ID.\n2. Works for images directly (screenshots). For PDF/DOCX MOM files,\n   OpenAI's vision endpoint only accepts images — if you send a PDF, add a\n   PDF-to-image or PDF-to-text conversion step before the vision call\n   (n8n's Extract from File node can pull text from a PDF directly, which\n   is often good enough for typed MOM documents).\n3. Duplicate detection is a simple fuzzy string match against open tasks —\n   tune the threshold in \"Check Duplicates\" if it's too aggressive/lax.\n   Matches are closed immediately (that's dedup, not creation); brand-new\n   tasks are created right away but tagged \"[PENDING CONFIRMATION\n   batch:<id>]\" in Notes so the preview/confirm loop below can finalize or\n   delete the whole batch together (state has to live in Airtable since\n   the Telegram button tap is a separate workflow execution).",
+        "height": 340,
+        "width": 440
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-320, -260]
+    },
+    { "parameters": { "updates": ["message"] },
+      "id": "telegram_trigger",
+      "name": "File Sent to Bot",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 0],
+      "webhookId": "phase6-mom-screenshot-to-tasks",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ !!($json.message.photo || $json.message.document) }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }]
+        }
+      },
+      "id": "if_has_file",
+      "name": "Has File?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.photo ? $json.message.photo[$json.message.photo.length - 1].file_id : $json.message.document.file_id }}"
+      },
+      "id": "telegram_download",
+      "name": "Download File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [640, 0],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-4.1-mini',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: 'Extract action items assigned to me or my company from this meeting minutes / screenshot. Reply ONLY with JSON: {\"tasks\": [{\"task\": string, \"dueDate\": \"YYYY-MM-DD\" or null, \"assignee\": string}]}' },\n    { role: 'user', content: [ { type: 'image_url', image_url: { url: 'data:image/png;base64,' + $binary.data.data } } ] }\n  ]\n}) }}"
+      },
+      "id": "openai_vision",
+      "name": "Extract Action Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "OpenAI Header Auth" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": true,
+        "options": { "filterByFormula": "={{ \"{Status} != 'Closed'\" }}" }
+      },
+      "id": "airtable_open_tasks",
+      "name": "Get Open Tasks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1120, 0],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "function similarity(a, b) {\n  a = a.toLowerCase(); b = b.toLowerCase();\n  const setA = new Set(a.split(/\\s+/));\n  const setB = new Set(b.split(/\\s+/));\n  const overlap = [...setA].filter(w => setB.has(w)).length;\n  return overlap / Math.max(setA.size, setB.size, 1);\n}\n\nconst extracted = JSON.parse($('Extract Action Items').first().json.choices[0].message.content).tasks;\nconst openTasks = $('Get Open Tasks').all().map(i => i.json);\nconst batchId = Date.now().toString(36);\n\nconst newTasks = [];\nconst duplicateIds = [];\nfor (const t of extracted) {\n  const match = openTasks.find(o => similarity(o.fields['Task name'] || '', t.task) > 0.6);\n  if (match) duplicateIds.push(match.id);\n  else newTasks.push({ ...t, batchId });\n}\nreturn [{ json: { batchId, newTasks, duplicateIds, duplicateCount: duplicateIds.length } }];"
+      },
+      "id": "code_dedupe",
+      "name": "Check Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 0]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "id": "={{ $json }}", "Status": "Closed" }
+        },
+        "options": {}
+      },
+      "id": "airtable_close_dupes",
+      "name": "Close Duplicates",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1600, -120],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": { "fieldToSplitOut": "newTasks" },
+      "id": "split_new_tasks",
+      "name": "Split New Tasks",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1600, 60]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "create",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Task name": "={{ $json.newTasks.task }}",
+            "Due date": "={{ $json.newTasks.dueDate }}",
+            "Category": "={{ ['Project'] }}",
+            "Status": "Open",
+            "Source": "MOM/screenshot",
+            "Notes": "=[PENDING CONFIRMATION batch:{{ $json.newTasks.batchId }}]"
+          }
+        }
+      },
+      "id": "airtable_create_pending",
+      "name": "Create Pending Tasks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1840, 60],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=📝 From your MOM/screenshot:\n\nNew tasks pending confirmation ({{ $('Check Duplicates').item.json.newTasks.length }}):\n{{ $('Check Duplicates').item.json.newTasks.map(t => '- ' + t.task + (t.dueDate ? ' (due ' + t.dueDate + ')' : '')).join('\\n') }}\n\nAlready tracked — marked Closed automatically: {{ $('Check Duplicates').item.json.duplicateCount }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "✅ Confirm all", "additionalFields": { "callback_data": "=momtasks_confirm:{{ $('Check Duplicates').item.json.batchId }}" } },
+                  { "text": "🗑️ Discard", "additionalFields": { "callback_data": "=momtasks_discard:{{ $('Check Duplicates').item.json.batchId }}" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_preview",
+      "name": "Preview Extracted Tasks",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2080, 60],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    { "parameters": { "updates": ["callback_query"] },
+      "id": "telegram_trigger_confirm",
+      "name": "Confirm/Discard Tap",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 320],
+      "webhookId": "phase6-mom-confirm",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const [action, batchId] = $json.callback_query.data.split(':');\nif (!action.startsWith('momtasks_')) return [];\nreturn [{ json: { action: action.replace('momtasks_', ''), batchId } }];"
+      },
+      "id": "code_parse_mom_callback",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 320]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": true,
+        "options": { "filterByFormula": "=FIND('batch:{{ $json.batchId }}', {Notes}) > 0" }
+      },
+      "id": "airtable_find_batch",
+      "name": "Find Batch Records",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [640, 320],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $('Parse Callback').item.json.action }}", "rightValue": "confirm", "operator": { "type": "string", "operation": "equals" } }]
+        }
+      },
+      "id": "if_mom_confirm",
+      "name": "Confirmed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 320]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "id": "={{ $json.id }}", "Notes": "={{ ($json.fields['Notes'] || '').replace(/\\[PENDING CONFIRMATION batch:[^\\]]*\\]/, '').trim() }}" }
+        }
+      },
+      "id": "airtable_confirm_batch",
+      "name": "Clear Pending Marker",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1120, 220],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "deleteRecord",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "id": "={{ $json.id }}"
+      },
+      "id": "airtable_discard_batch",
+      "name": "Delete Discarded Batch",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1120, 420],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $('Parse Callback').item.json.action === 'confirm' ? '✅ Tasks confirmed.' : '🗑️ Batch discarded.' }}",
+        "additionalFields": {}
+      },
+      "id": "telegram_ack",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1360, 320],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "File Sent to Bot": { "main": [[{ "node": "Has File?", "type": "main", "index": 0 }]] },
+    "Has File?": { "main": [[{ "node": "Download File", "type": "main", "index": 0 }]] },
+    "Download File": { "main": [[{ "node": "Extract Action Items", "type": "main", "index": 0 }]] },
+    "Extract Action Items": { "main": [[{ "node": "Get Open Tasks", "type": "main", "index": 0 }]] },
+    "Get Open Tasks": { "main": [[{ "node": "Check Duplicates", "type": "main", "index": 0 }]] },
+    "Check Duplicates": {
+      "main": [
+        [
+          { "node": "Close Duplicates", "type": "main", "index": 0 },
+          { "node": "Split New Tasks", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Split New Tasks": { "main": [[{ "node": "Create Pending Tasks", "type": "main", "index": 0 }]] },
+    "Create Pending Tasks": { "main": [[{ "node": "Preview Extracted Tasks", "type": "main", "index": 0 }]] },
+    "Confirm/Discard Tap": { "main": [[{ "node": "Parse Callback", "type": "main", "index": 0 }]] },
+    "Parse Callback": { "main": [[{ "node": "Find Batch Records", "type": "main", "index": 0 }]] },
+    "Find Batch Records": { "main": [[{ "node": "Confirmed?", "type": "main", "index": 0 }]] },
+    "Confirmed?": {
+      "main": [
+        [{ "node": "Clear Pending Marker", "type": "main", "index": 0 }],
+        [{ "node": "Delete Discarded Batch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Clear Pending Marker": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] },
+    "Delete Discarded Batch": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,120 @@
+{
+  "name": "Phase 3a - Daily Task Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Replace YOUR_AIRTABLE_BASE_ID in the Airtable node.\n2. Set your Airtable + Telegram credentials on the relevant nodes.\n3. Adjust the schedule (default 8am daily).\n\nNote: n8n's Telegram inline-keyboard UI has changed across versions. If the\nbuttons don't render after import, open \"Send Reminder\" and rebuild the\nthree buttons (Done / Snooze 1 day / Reassign) in the node UI — keep the\ncallback_data format `done:<recordId>`, `snooze:<recordId>`,\n`reassign:<recordId>` since phase3b matches on that prefix.",
+        "height": 260,
+        "width": 380
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-260, -80]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "triggerAtHour": 8 }]
+        }
+      },
+      "id": "schedule1",
+      "name": "Every Morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": true,
+        "options": {
+          "filterByFormula": "=AND({Status} != 'Closed', {Due date} != '', IS_BEFORE({Due date}, DATEADD(TODAY(), 1, 'days')))"
+        }
+      },
+      "id": "airtable1",
+      "name": "Find Due/Overdue Tasks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [460, 0],
+      "credentials": {
+        "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg",
+              "name": "message",
+              "type": "string",
+              "value": "=📌 {{ $json.fields['Task name'] }}\nCategory: {{ $json.fields['Category'] }}\nDue: {{ $json.fields['Due date'] }}"
+            }
+          ]
+        }
+      },
+      "id": "set1",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Done",
+                    "additionalFields": { "callback_data": "=done:{{ $('Find Due/Overdue Tasks').item.json.id }}" }
+                  },
+                  {
+                    "text": "⏰ Snooze 1 day",
+                    "additionalFields": { "callback_data": "=snooze:{{ $('Find Due/Overdue Tasks').item.json.id }}" }
+                  },
+                  {
+                    "text": "🔀 Reassign",
+                    "additionalFields": { "callback_data": "=reassign:{{ $('Find Due/Overdue Tasks').item.json.id }}" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram1",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [940, 0],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Every Morning": {
+      "main": [[{ "node": "Find Due/Overdue Tasks", "type": "main", "index": 0 }]]
+    },
+    "Find Due/Overdue Tasks": {
+      "main": [[{ "node": "Build Message", "type": "main", "index": 0 }]]
+    },
+    "Build Message": {
+      "main": [[{ "node": "Send Reminder", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,203 @@
+{
+  "name": "Phase 8b - Call Outcome Capture",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Set Airtable + Telegram credentials, OPENAI_API_KEY, replace\n   YOUR_AIRTABLE_BASE_ID.\n2. Handles the Discussed / Call back / No answer buttons sent by phase8a,\n   and separately accepts a voice note in reply — transcribed with\n   Whisper, classified by an LLM into the same three outcomes plus any new\n   task it mentions.\n3. After recording an outcome, send /callqueue again (phase8a) to get the\n   next contact — this workflow doesn't auto-advance the queue, to avoid a\n   fragile inter-workflow call for a one-person queue.",
+        "height": 280,
+        "width": 440
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-320, -220]
+    },
+    { "parameters": { "updates": ["callback_query"] },
+      "id": "telegram_trigger_button",
+      "name": "Quick Reply Tap",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, -140],
+      "webhookId": "phase8b-call-outcome-button",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const [prefix, recordId, outcome] = $json.callback_query.data.split(':');\nif (prefix !== 'callresult') return [];\nreturn [{ json: { recordId, outcome } }];"
+      },
+      "id": "code_parse_button",
+      "name": "Parse Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, -140]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "id": "={{ $json.recordId }}", "Call outcome": "={{ $json.outcome }}" }
+        }
+      },
+      "id": "airtable_update_outcome",
+      "name": "Save Outcome",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [640, -140],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=✅ Recorded: {{ $('Parse Outcome').item.json.outcome }}. Send /callqueue for the next contact.",
+        "additionalFields": {}
+      },
+      "id": "telegram_ack_button",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, -140],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    { "parameters": { "updates": ["message"] },
+      "id": "telegram_trigger_voice",
+      "name": "Voice Note Received",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 140],
+      "webhookId": "phase8b-call-outcome-voice",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ !!$json.message.voice }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }]
+        }
+      },
+      "id": "if_has_voice",
+      "name": "Has Voice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 140]
+    },
+    {
+      "parameters": { "resource": "file", "fileId": "={{ $json.message.voice.file_id }}" },
+      "id": "telegram_download_voice",
+      "name": "Download Voice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [640, 140],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "parameter": "model", "value": "whisper-1" }
+          ]
+        },
+        "sendBinaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "openai_whisper",
+      "name": "Transcribe with Whisper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 140],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "OpenAI Header Auth" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-4.1-mini',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: 'Classify a call recap into one of: Discussed, Call back, No answer. Also extract any new follow-up task mentioned, if any. Reply ONLY with JSON: {\"outcome\": string, \"newTask\": string or null, \"newTaskDueDate\": \"YYYY-MM-DD\" or null}.' },\n    { role: 'user', content: $json.text }\n  ]\n}) }}"
+      },
+      "id": "openai_classify",
+      "name": "Classify Outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 140],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "OpenAI Header Auth" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": false,
+        "limit": 1,
+        "options": { "filterByFormula": "=AND({Call outcome} = 'Attempted', {Status} != 'Closed')" }
+      },
+      "id": "airtable_find_open_call",
+      "name": "Find Most Recent Call",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1360, 140],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Call outcome": "={{ JSON.parse($('Classify Outcome').first().json.choices[0].message.content).outcome }}"
+          }
+        }
+      },
+      "id": "airtable_update_voice_outcome",
+      "name": "Save Voice Outcome",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1600, 140],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ (() => { const r = JSON.parse($('Classify Outcome').first().json.choices[0].message.content); return '✅ Outcome: ' + r.outcome + (r.newTask ? '\\n🆕 New task noted: ' + r.newTask + (r.newTaskDueDate ? ' (due ' + r.newTaskDueDate + ')' : '') + ' — add it manually or wait for phase 5/6 style confirmation if you wire that in.' : ''); })() }}",
+        "additionalFields": {}
+      },
+      "id": "telegram_ack_voice",
+      "name": "Acknowledge Voice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1840, 140],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Quick Reply Tap": { "main": [[{ "node": "Parse Outcome", "type": "main", "index": 0 }]] },
+    "Parse Outcome": { "main": [[{ "node": "Save Outcome", "type": "main", "index": 0 }]] },
+    "Save Outcome": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] },
+    "Voice Note Received": { "main": [[{ "node": "Has Voice?", "type": "main", "index": 0 }]] },
+    "Has Voice?": { "main": [[{ "node": "Download Voice", "type": "main", "index": 0 }]] },
+    "Download Voice": { "main": [[{ "node": "Transcribe with Whisper", "type": "main", "index": 0 }]] },
+    "Transcribe with Whisper": { "main": [[{ "node": "Classify Outcome", "type": "main", "index": 0 }]] },
+    "Classify Outcome": { "main": [[{ "node": "Find Most Recent Call", "type": "main", "index": 0 }]] },
+    "Find Most Recent Call": { "main": [[{ "node": "Save Voice Outcome", "type": "main", "index": 0 }]] },
+    "Save Voice Outcome": { "main": [[{ "node": "Acknowledge Voice", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,123 @@
+{
+  "name": "Phase 7 - WhatsApp Follow-ups",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Tag tasks you want WhatsApp follow-up for with Source = WhatsApp and\n   fill in Contact phone (E.164 format, e.g. +9715xxxxxxx, no spaces).\n2. Replace YOUR_AIRTABLE_BASE_ID and set Airtable + Telegram credentials.\n3. Runs hourly and only messages you once per task per day (checks\n   \"Last reminded\" against today's date), then stamps \"Last reminded\" so\n   it won't repeat until tomorrow.",
+        "height": 260,
+        "width": 400
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -120]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "hours" }] } },
+      "id": "schedule1",
+      "name": "Hourly Scan",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": true,
+        "options": {
+          "filterByFormula": "=AND({Source} = 'WhatsApp', {Status} != 'Closed', {Contact phone} != '', OR({Last reminded} = '', IS_BEFORE({Last reminded}, TODAY())))"
+        }
+      },
+      "id": "airtable_whatsapp_tasks",
+      "name": "Find WhatsApp Tasks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [440, 0],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg",
+              "name": "waMessage",
+              "type": "string",
+              "value": "=Hi {{ $json.fields['Contact name'] }}, following up on: {{ $json.fields['Task name'] }}"
+            },
+            {
+              "id": "url",
+              "name": "waUrl",
+              "type": "string",
+              "value": "=https://wa.me/{{ $json.fields['Contact phone'].replace(/[^0-9]/g, '') }}?text={{ encodeURIComponent('Hi ' + $json.fields['Contact name'] + ', following up on: ' + $json.fields['Task name']) }}"
+            }
+          ]
+        }
+      },
+      "id": "set_wa_link",
+      "name": "Build wa.me Link",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=💬 WhatsApp follow-up ready:\n\"{{ $('Find WhatsApp Tasks').item.json.fields['Task name'] }}\" — {{ $('Find WhatsApp Tasks').item.json.fields['Contact name'] }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "💬 Open in WhatsApp", "additionalFields": { "url": "={{ $json.waUrl }}" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_wa_button",
+      "name": "Send WhatsApp Button",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [920, 0],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Find WhatsApp Tasks').item.json.id }}",
+            "Last reminded": "={{ $today.toFormat('yyyy-MM-dd') }}"
+          }
+        }
+      },
+      "id": "airtable_stamp_reminded",
+      "name": "Stamp Last Reminded",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1160, 0],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    }
+  ],
+  "connections": {
+    "Hourly Scan": { "main": [[{ "node": "Find WhatsApp Tasks", "type": "main", "index": 0 }]] },
+    "Find WhatsApp Tasks": { "main": [[{ "node": "Build wa.me Link", "type": "main", "index": 0 }]] },
+    "Build wa.me Link": { "main": [[{ "node": "Send WhatsApp Button", "type": "main", "index": 0 }]] },
+    "Send WhatsApp Button": { "main": [[{ "node": "Stamp Last Reminded", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

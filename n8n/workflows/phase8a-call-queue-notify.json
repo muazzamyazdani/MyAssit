@@ -1,0 +1,183 @@
+{
+  "name": "Phase 8a - Call Queue Notify",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Set Airtable + Telegram credentials, replace YOUR_AIRTABLE_BASE_ID.\n2. Set N8N_WEBHOOK_BASE_URL as an n8n environment variable (your instance's\n   public webhook base, e.g. https://your-instance.app.n8n.cloud) — the\n   Call button links to this workflow's webhook, not directly to tel:, so\n   Airtable gets stamped before the dialer opens.\n3. Activate this workflow so the webhook is live, then message the bot\n   \"/callqueue\" to get the next contact.\n4. \"Next in queue\" = open tasks with a Contact phone that haven't been\n   called today. After you finish a call (phase8b), send \"/callqueue\"\n   again to get the next one.",
+        "height": 300,
+        "width": 440
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-320, -260]
+    },
+    { "parameters": { "updates": ["message"] },
+      "id": "telegram_trigger",
+      "name": "Command Received",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, -160],
+      "webhookId": "phase8a-call-queue-notify-cmd",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.message.text }}", "rightValue": "/callqueue", "operator": { "type": "string", "operation": "equals" } }]
+        }
+      },
+      "id": "if_is_command",
+      "name": "Is /callqueue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, -160]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": false,
+        "limit": 1,
+        "options": {
+          "filterByFormula": "=AND({Status} != 'Closed', {Contact phone} != '', OR({Last reminded} = '', IS_BEFORE({Last reminded}, TODAY())))"
+        }
+      },
+      "id": "airtable_next_contact",
+      "name": "Get Next Contact",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [640, -160],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=📞 Next up: {{ $json.fields['Contact name'] }} — {{ $json.fields['Task name'] }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "📞 Call", "additionalFields": { "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/call-redirect?recordId={{ $json.id }}" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_call_button",
+      "name": "Send Call Button",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, -160],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "call-redirect",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_call",
+      "name": "Call Redirect Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [160, 160],
+      "webhookId": "call-redirect"
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "get",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "id": "={{ $json.query.recordId }}"
+      },
+      "id": "airtable_get_contact",
+      "name": "Get Contact",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [400, 160],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Call outcome": "=Attempted {{ $today.toFormat('yyyy-MM-dd HH:mm') }}",
+            "Last reminded": "={{ $today.toFormat('yyyy-MM-dd') }}"
+          }
+        }
+      },
+      "id": "airtable_mark_attempted",
+      "name": "Mark Call Attempted",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [640, 160],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "redirect",
+        "redirectURL": "={{ 'tel:' + $('Get Contact').item.json.fields['Contact phone'] }}"
+      },
+      "id": "respond_redirect",
+      "name": "Redirect to Dialer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 160]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=How did the call with {{ $('Get Contact').item.json.fields['Contact name'] }} go? You can also just send a voice note.",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "✅ Discussed", "additionalFields": { "callback_data": "=callresult:{{ $('Get Contact').item.json.id }}:Discussed" } },
+                  { "text": "🔁 Call back", "additionalFields": { "callback_data": "=callresult:{{ $('Get Contact').item.json.id }}:Call back" } },
+                  { "text": "❌ No answer", "additionalFields": { "callback_data": "=callresult:{{ $('Get Contact').item.json.id }}:No answer" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_ask_outcome",
+      "name": "Ask Call Outcome",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 160],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Command Received": { "main": [[{ "node": "Is /callqueue?", "type": "main", "index": 0 }]] },
+    "Is /callqueue?": { "main": [[{ "node": "Get Next Contact", "type": "main", "index": 0 }]] },
+    "Get Next Contact": { "main": [[{ "node": "Send Call Button", "type": "main", "index": 0 }]] },
+    "Call Redirect Webhook": { "main": [[{ "node": "Get Contact", "type": "main", "index": 0 }]] },
+    "Get Contact": { "main": [[{ "node": "Mark Call Attempted", "type": "main", "index": 0 }]] },
+    "Mark Call Attempted": { "main": [[{ "node": "Redirect to Dialer", "type": "main", "index": 0 }]] },
+    "Redirect to Dialer": { "main": [[{ "node": "Ask Call Outcome", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

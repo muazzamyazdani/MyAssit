@@ -1,0 +1,115 @@
+{
+  "name": "Phase 4 - Email Awaiting Reply Follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. In Gmail, create a label \"Awaiting-reply\" and manually label emails you\n   send that need a reply (or wire a Telegram button later to do this from\n   phase 2/3's chat).\n2. Connect your Gmail OAuth2 credential on both Gmail nodes.\n3. Adjust \"Follow-up Settings\" to change how many days to wait.\n4. A thread with only 1 message = no reply yet. If Gmail's thread message\n   count doesn't match your expectations, double check the label is only\n   applied to the original sent message, not the whole thread.",
+        "height": 280,
+        "width": 420
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-300, -140]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "days", "triggerAtHour": 9 }] } },
+      "id": "schedule1",
+      "name": "Daily Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "days", "name": "daysBeforeFollowup", "type": "number", "value": 3 }
+          ]
+        }
+      },
+      "id": "set1",
+      "name": "Follow-up Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": { "q": "label:Awaiting-reply" }
+      },
+      "id": "gmail_search",
+      "name": "Search Awaiting-reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [680, 0],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail" } }
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.threadId }}"
+      },
+      "id": "gmail_thread",
+      "name": "Get Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [920, 0],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const days = $('Follow-up Settings').first().json.daysBeforeFollowup;\nconst thread = $json;\nconst messages = thread.messages || [];\nconst noReply = messages.length === 1;\nconst sentAt = Number(messages[0]?.internalDate || Date.now());\nconst daysElapsed = (Date.now() - sentAt) / 86400000;\nif (noReply && daysElapsed >= days) {\n  return [{ json: { threadId: thread.id, to: messages[0].payload.headers.find(h => h.name === 'To')?.value, subject: messages[0].payload.headers.find(h => h.name === 'Subject')?.value } }];\n}\nreturn [];"
+      },
+      "id": "code_filter",
+      "name": "Filter Needs Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 0]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "={{ $json.threadId }}",
+        "message": "Just following up on my note below — would appreciate a reply when you get a chance.",
+        "options": {}
+      },
+      "id": "gmail_reply",
+      "name": "Send Follow-up",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1400, 0],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=📧 Auto follow-up sent to {{ $('Filter Needs Follow-up').item.json.to }} re: \"{{ $('Filter Needs Follow-up').item.json.subject }}\"",
+        "additionalFields": {}
+      },
+      "id": "telegram_notify",
+      "name": "Notify Me",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1640, 0],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Daily Check": { "main": [[{ "node": "Follow-up Settings", "type": "main", "index": 0 }]] },
+    "Follow-up Settings": { "main": [[{ "node": "Search Awaiting-reply", "type": "main", "index": 0 }]] },
+    "Search Awaiting-reply": { "main": [[{ "node": "Get Thread", "type": "main", "index": 0 }]] },
+    "Get Thread": { "main": [[{ "node": "Filter Needs Follow-up", "type": "main", "index": 0 }]] },
+    "Filter Needs Follow-up": { "main": [[{ "node": "Send Follow-up", "type": "main", "index": 0 }]] },
+    "Send Follow-up": { "main": [[{ "node": "Notify Me", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

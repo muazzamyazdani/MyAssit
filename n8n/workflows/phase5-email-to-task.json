@@ -1,0 +1,228 @@
+{
+  "name": "Phase 5 - Email to Task",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Connect Gmail OAuth2 (trigger) and set OPENAI_API_KEY as an n8n\n   environment variable, plus Airtable + Telegram credentials.\n2. Replace YOUR_AIRTABLE_BASE_ID.\n3. New tasks are created immediately but Notes is prefixed\n   \"[PENDING CONFIRMATION]\" — Confirm strips that prefix, Discard deletes\n   the record. This keeps the human-confirm step without needing a second\n   staging table.\n4. \"Edit\" isn't wired as a separate flow here — for now, editing means:\n   discard, then add the task manually (or ask Claude Code to add an Edit\n   flow once you know what you'd actually want to change most often).",
+        "height": 320,
+        "width": 420
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-320, -260]
+    },
+    {
+      "parameters": { "pollTimes": { "item": [{ "mode": "everyMinute" }] } },
+      "id": "gmail_trigger",
+      "name": "New Inbound Email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [160, -160],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-4.1-mini',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: 'You triage inbound email for a busy professional. Reply ONLY with JSON: {\"requiresAction\": boolean, \"task\": string, \"dueDate\": \"YYYY-MM-DD\" or null}. requiresAction is true only if the recipient needs to respond or do something.' },\n    { role: 'user', content: 'Subject: ' + $json.subject + '\\n\\n' + $json.snippet }\n  ]\n}) }}"
+      },
+      "id": "openai_triage",
+      "name": "Triage with OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, -160],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "OpenAI Header Auth" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = JSON.parse($json.choices[0].message.content);\nconst email = $('New Inbound Email').item.json;\nif (!parsed.requiresAction) return [];\nreturn [{ json: { task: parsed.task, dueDate: parsed.dueDate, fromEmail: email.from, subject: email.subject } }];"
+      },
+      "id": "code_parse",
+      "name": "Parse & Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, -160]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "create",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Task name": "={{ $json.task }}",
+            "Due date": "={{ $json.dueDate }}",
+            "Category": "={{ ['Personal'] }}",
+            "Status": "Open",
+            "Source": "Email",
+            "Contact email": "={{ $json.fromEmail }}",
+            "Notes": "=[PENDING CONFIRMATION] From email: {{ $json.subject }}"
+          }
+        }
+      },
+      "id": "airtable_create",
+      "name": "Create Pending Task",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [880, -160],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🆕 New task proposed from email:\n\"{{ $json.fields['Task name'] }}\"\nDue: {{ $json.fields['Due date'] }}\nFrom: {{ $json.fields['Contact email'] }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "✅ Confirm", "additionalFields": { "callback_data": "=emailtask_confirm:{{ $json.id }}" } },
+                  { "text": "🗑️ Discard", "additionalFields": { "callback_data": "=emailtask_discard:{{ $json.id }}" } }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "telegram_preview",
+      "name": "Preview on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, -160],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    { "parameters": { "updates": ["callback_query"] },
+      "id": "telegram_trigger_confirm",
+      "name": "Telegram Confirm/Discard",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 160],
+      "webhookId": "phase5-email-to-task-confirm",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.callback_query.data;\nconst [action, recordId] = data.split(':');\nif (!action.startsWith('emailtask_')) return [];\nreturn [{ json: { action: action.replace('emailtask_', ''), recordId } }];"
+      },
+      "id": "code_parse_callback",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "confirm", "operator": { "type": "string", "operation": "equals" } }]
+        }
+      },
+      "id": "if_confirm",
+      "name": "Confirm or Discard?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [640, 160]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "get",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "id": "={{ $json.recordId }}"
+      },
+      "id": "airtable_get_pending",
+      "name": "Get Pending Task",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [880, 20],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { recordId: $json.id, cleanNotes: ($json.fields['Notes'] || '').replace('[PENDING CONFIRMATION] ', '') } }];"
+      },
+      "id": "code_strip_pending",
+      "name": "Strip Pending Marker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 20]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "id": "={{ $json.recordId }}", "Notes": "={{ $json.cleanNotes }}" }
+        }
+      },
+      "id": "airtable_confirm_update",
+      "name": "Confirm Task",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1120, 20],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "deleteRecord",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "id": "={{ $json.recordId }}"
+      },
+      "id": "airtable_delete",
+      "name": "Delete Discarded Task",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [880, 240],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $('Parse Callback').item.json.action === 'confirm' ? '✅ Task confirmed.' : '🗑️ Task discarded.' }}",
+        "additionalFields": {}
+      },
+      "id": "telegram_ack",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 160],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "New Inbound Email": { "main": [[{ "node": "Triage with OpenAI", "type": "main", "index": 0 }]] },
+    "Triage with OpenAI": { "main": [[{ "node": "Parse & Filter", "type": "main", "index": 0 }]] },
+    "Parse & Filter": { "main": [[{ "node": "Create Pending Task", "type": "main", "index": 0 }]] },
+    "Create Pending Task": { "main": [[{ "node": "Preview on Telegram", "type": "main", "index": 0 }]] },
+    "Telegram Confirm/Discard": { "main": [[{ "node": "Parse Callback", "type": "main", "index": 0 }]] },
+    "Parse Callback": { "main": [[{ "node": "Confirm or Discard?", "type": "main", "index": 0 }]] },
+    "Confirm or Discard?": {
+      "main": [
+        [{ "node": "Get Pending Task", "type": "main", "index": 0 }],
+        [{ "node": "Delete Discarded Task", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Pending Task": { "main": [[{ "node": "Strip Pending Marker", "type": "main", "index": 0 }]] },
+    "Strip Pending Marker": { "main": [[{ "node": "Confirm Task", "type": "main", "index": 0 }]] },
+    "Confirm Task": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] },
+    "Delete Discarded Task": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,108 @@
+{
+  "name": "Phase 9 - Voice Task Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup\n1. Set Airtable + Telegram credentials, OPENAI_API_KEY, replace\n   YOUR_AIRTABLE_BASE_ID.\n2. Message the bot \"/tasks\" to get a spoken summary of your open tasks as\n   a Telegram voice note.\n3. OpenAI's TTS endpoint returns MP3 by default — Telegram's sendVoice\n   wants OGG/Opus for the native voice-note bubble. If Telegram rejects\n   the file, either switch \"Send Voice Note\" to sendAudio (plays as a\n   regular audio file, no conversion needed) or add an audio-conversion\n   step (e.g. an ffmpeg-capable node/service) before it.",
+        "height": 300,
+        "width": 440
+      },
+      "id": "note1",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-320, -220]
+    },
+    { "parameters": { "updates": ["message"] },
+      "id": "telegram_trigger",
+      "name": "Command Received",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [160, 0],
+      "webhookId": "phase9-voice-task-summary",
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{ "leftValue": "={{ $json.message.text }}", "rightValue": "/tasks", "operator": { "type": "string", "operation": "equals" } }]
+        }
+      },
+      "id": "if_is_command",
+      "name": "Is /tasks?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Tasks", "mode": "id" },
+        "returnAll": true,
+        "options": { "filterByFormula": "={{ \"{Status} != 'Closed'\" }}" }
+      },
+      "id": "airtable_open_tasks",
+      "name": "Get Open Tasks",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [640, 0],
+      "credentials": { "airtableTokenApi": { "id": "REPLACE_ME", "name": "Airtable" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.all().map(i => i.json.fields);\nif (tasks.length === 0) {\n  return [{ json: { summary: 'You have no open tasks. Nicely done.' } }];\n}\nconst lines = tasks.map(t => `${t['Task name']}, category ${Array.isArray(t.Category) ? t.Category.join(' and ') : t.Category || 'uncategorized'}${t['Due date'] ? ', due ' + t['Due date'] : ''}.`);\nreturn [{ json: { summary: `You have ${tasks.length} open task${tasks.length === 1 ? '' : 's'}. ` + lines.join(' ') } }];"
+      },
+      "id": "code_summary",
+      "name": "Build Spoken Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/speech",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'tts-1', voice: 'alloy', input: $json.summary }) }}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "openai_tts",
+      "name": "Generate Speech",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE_ME", "name": "OpenAI Header Auth" } }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendVoice",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {}
+      },
+      "id": "telegram_send_voice",
+      "name": "Send Voice Note",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1360, 0],
+      "credentials": { "telegramApi": { "id": "REPLACE_ME", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Command Received": { "main": [[{ "node": "Is /tasks?", "type": "main", "index": 0 }]] },
+    "Is /tasks?": { "main": [[{ "node": "Get Open Tasks", "type": "main", "index": 0 }]] },
+    "Get Open Tasks": { "main": [[{ "node": "Build Spoken Summary", "type": "main", "index": 0 }]] },
+    "Build Spoken Summary": { "main": [[{ "node": "Generate Speech", "type": "main", "index": 0 }]] },
+    "Generate Speech": { "main": [[{ "node": "Send Voice Note", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
