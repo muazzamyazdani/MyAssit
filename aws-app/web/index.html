@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Task Agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --border: #e2e5ea;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --danger: #dc2626;
+    --success: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 20px; margin: 0 0 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+  label:first-child { margin-top: 0; }
+  input, textarea {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 14px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: transparent; color: var(--muted); }
+  .btn-ghost:hover { color: var(--text); }
+  .row { display: flex; gap: 8px; margin-top: 16px; }
+  .row button { flex: 1; }
+  .task {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--card);
+  }
+  .task.closed { opacity: 0.55; }
+  .task-text { font-size: 15px; margin-bottom: 6px; }
+  .task-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .tag {
+    display: inline-block;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 12px;
+    margin-right: 4px;
+  }
+  .task-actions { display: flex; gap: 6px; }
+  .task-actions button { font-size: 12px; padding: 6px 10px; }
+  .btn-done { background: #dcfce7; color: #166534; }
+  .btn-snooze { background: #fef3c7; color: #92400e; }
+  .btn-reopen { background: #e0e7ff; color: #3730a3; }
+  .error { color: var(--danger); font-size: 13px; margin-top: 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .filters { display: flex; gap: 6px; margin-bottom: 14px; }
+  .filters button { font-size: 12px; padding: 6px 12px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+  .filters button.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .hidden { display: none; }
+  .tab-switch { display: flex; gap: 16px; margin-bottom: 16px; }
+  .tab-switch button { background: none; padding: 0 0 6px; border-bottom: 2px solid transparent; color: var(--muted); border-radius: 0; }
+  .tab-switch button.active { color: var(--text); border-bottom-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Task Agent</h1>
+
+  <!-- ===== AUTH SCREEN ===== -->
+  <div id="authScreen">
+    <div class="tab-switch">
+      <button id="tabSignIn" class="active">Sign in</button>
+      <button id="tabSignUp">Create account</button>
+    </div>
+
+    <div id="signInCard" class="card">
+      <label>Email</label>
+      <input id="siEmail" type="email" autocomplete="username" />
+      <label>Password</label>
+      <input id="siPassword" type="password" autocomplete="current-password" />
+      <div class="row">
+        <button class="btn-primary" id="signInBtn">Sign in</button>
+      </div>
+      <div class="error hidden" id="siError"></div>
+    </div>
+
+    <div id="signUpCard" class="card hidden">
+      <label>Email</label>
+      <input id="suEmail" type="email" autocomplete="username" />
+      <label>Password</label>
+      <input id="suPassword" type="password" autocomplete="new-password" />
+      <div class="muted" style="margin-top:6px;">At least 8 characters, with uppercase, lowercase, and a digit.</div>
+      <div class="row">
+        <button class="btn-primary" id="signUpBtn">Create account</button>
+      </div>
+      <div class="error hidden" id="suError"></div>
+    </div>
+
+    <div id="confirmCard" class="card hidden">
+      <p class="muted">We emailed you a verification code.</p>
+      <label>Verification code</label>
+      <input id="confirmCode" />
+      <div class="row">
+        <button class="btn-primary" id="confirmBtn">Confirm</button>
+      </div>
+      <div class="error hidden" id="confirmError"></div>
+    </div>
+  </div>
+
+  <!-- ===== APP SCREEN ===== -->
+  <div id="appScreen" class="hidden">
+    <div class="topbar">
+      <span class="muted" id="whoami"></span>
+      <button class="btn-ghost" id="logoutBtn">Sign out</button>
+    </div>
+
+    <div class="card">
+      <label>Task</label>
+      <input id="newTaskText" placeholder="e.g. Call Sajid and ask for update" />
+      <label>Tags (comma-separated)</label>
+      <input id="newTaskTags" placeholder="e.g. finance, procurement" />
+      <label>Due date</label>
+      <input id="newTaskDue" type="date" />
+      <div class="row">
+        <button class="btn-primary" id="addTaskBtn">Add task</button>
+      </div>
+      <div class="error hidden" id="addError"></div>
+    </div>
+
+    <div class="filters">
+      <button class="filter-btn active" data-filter="open">Open</button>
+      <button class="filter-btn" data-filter="all">All</button>
+    </div>
+
+    <div id="taskList"></div>
+    <p class="muted" id="emptyState" style="display:none;">No tasks here yet.</p>
+  </div>
+</div>
+
+<script>
+// ---- Config: your deployed backend ----
+const REGION = "us-west-2";
+const CLIENT_ID = "5o82rqoveo4bd4tbsu8un47nev";
+const API_URL = "https://xe0aocu9n4.execute-api.us-west-2.amazonaws.com";
+const COGNITO_URL = `https://cognito-idp.${REGION}.amazonaws.com/`;
+
+// ---- Cognito REST helpers (no SDK needed) ----
+async function cognitoRequest(target, body) {
+  const res = await fetch(COGNITO_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": `AWSCognitoIdentityProviderService.${target}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || data.__type || "Request failed");
+  return data;
+}
+
+function signIn(email, password) {
+  return cognitoRequest("InitiateAuth", {
+    AuthFlow: "USER_PASSWORD_AUTH",
+    ClientId: CLIENT_ID,
+    AuthParameters: { USERNAME: email, PASSWORD: password },
+  });
+}
+
+function signUp(email, password) {
+  return cognitoRequest("SignUp", {
+    ClientId: CLIENT_ID,
+    Username: email,
+    Password: password,
+    UserAttributes: [{ Name: "email", Value: email }],
+  });
+}
+
+function confirmSignUp(email, code) {
+  return cognitoRequest("ConfirmSignUp", {
+    ClientId: CLIENT_ID,
+    Username: email,
+    ConfirmationCode: code,
+  });
+}
+
+// ---- Session storage ----
+function saveSession(idToken, email) {
+  localStorage.setItem("idToken", idToken);
+  localStorage.setItem("email", email);
+}
+function getToken() { return localStorage.getItem("idToken"); }
+function getEmail() { return localStorage.getItem("email"); }
+function clearSession() { localStorage.removeItem("idToken"); localStorage.removeItem("email"); }
+
+// ---- Task API helpers ----
+async function apiRequest(path, method, body) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { showApp(false); throw new Error("Session expired, please sign in again."); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+const listTasks = () => apiRequest("/tasks", "GET");
+const createTask = (task) => apiRequest("/tasks", "POST", task);
+const updateTask = (taskId, patch) => apiRequest(`/tasks/${taskId}`, "PATCH", patch);
+
+// ---- UI wiring ----
+const $ = (id) => document.getElementById(id);
+let currentFilter = "open";
+
+function showError(id, message) {
+  const el = $(id);
+  el.textContent = message;
+  el.classList.remove("hidden");
+}
+function hideError(id) { $(id).classList.add("hidden"); }
+
+function showApp(loggedIn) {
+  $("authScreen").classList.toggle("hidden", loggedIn);
+  $("appScreen").classList.toggle("hidden", !loggedIn);
+  if (loggedIn) {
+    $("whoami").textContent = getEmail() || "";
+    refreshTasks();
+  }
+}
+
+// Tab switching (sign in / sign up)
+$("tabSignIn").onclick = () => {
+  $("tabSignIn").classList.add("active");
+  $("tabSignUp").classList.remove("active");
+  $("signInCard").classList.remove("hidden");
+  $("signUpCard").classList.add("hidden");
+  $("confirmCard").classList.add("hidden");
+};
+$("tabSignUp").onclick = () => {
+  $("tabSignUp").classList.add("active");
+  $("tabSignIn").classList.remove("active");
+  $("signUpCard").classList.remove("hidden");
+  $("signInCard").classList.add("hidden");
+  $("confirmCard").classList.add("hidden");
+};
+
+$("signInBtn").onclick = async () => {
+  hideError("siError");
+  try {
+    const email = $("siEmail").value.trim();
+    const result = await signIn(email, $("siPassword").value);
+    if (result.ChallengeName) {
+      showError("siError", `Additional step required: ${result.ChallengeName}. Set a permanent password via AWS CLI first.`);
+      return;
+    }
+    saveSession(result.AuthenticationResult.IdToken, email);
+    showApp(true);
+  } catch (err) {
+    showError("siError", err.message);
+  }
+};
+
+let pendingSignUpEmail = "";
+$("signUpBtn").onclick = async () => {
+  hideError("suError");
+  try {
+    const email = $("suEmail").value.trim();
+    await signUp(email, $("suPassword").value);
+    pendingSignUpEmail = email;
+    $("signUpCard").classList.add("hidden");
+    $("confirmCard").classList.remove("hidden");
+  } catch (err) {
+    showError("suError", err.message);
+  }
+};
+
+$("confirmBtn").onclick = async () => {
+  hideError("confirmError");
+  try {
+    await confirmSignUp(pendingSignUpEmail, $("confirmCode").value.trim());
+    $("confirmCard").classList.add("hidden");
+    $("tabSignIn").click();
+    $("siEmail").value = pendingSignUpEmail;
+  } catch (err) {
+    showError("confirmError", err.message);
+  }
+};
+
+$("logoutBtn").onclick = () => { clearSession(); showApp(false); };
+
+$("addTaskBtn").onclick = async () => {
+  hideError("addError");
+  const taskText = $("newTaskText").value.trim();
+  if (!taskText) { showError("addError", "Task text is required."); return; }
+  const tags = $("newTaskTags").value.split(",").map((t) => t.trim()).filter(Boolean);
+  const dueDate = $("newTaskDue").value || null;
+  try {
+    await createTask({ taskText, tags, dueDate, source: "Manual" });
+    $("newTaskText").value = "";
+    $("newTaskTags").value = "";
+    $("newTaskDue").value = "";
+    refreshTasks();
+  } catch (err) {
+    showError("addError", err.message);
+  }
+};
+
+document.querySelectorAll(".filter-btn").forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.filter;
+    renderTasks(window.__tasks || []);
+  };
+});
+
+function renderTasks(tasks) {
+  window.__tasks = tasks;
+  const visible = currentFilter === "open" ? tasks.filter((t) => t.status !== "Closed") : tasks;
+  visible.sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+
+  $("taskList").innerHTML = "";
+  $("emptyState").style.display = visible.length ? "none" : "block";
+
+  visible.forEach((task) => {
+    const div = document.createElement("div");
+    div.className = "task" + (task.status === "Closed" ? " closed" : "");
+    const tagsHtml = (task.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
+    div.innerHTML = `
+      <div class="task-text">${escapeHtml(task.taskText)}</div>
+      <div class="task-meta">${task.status}${task.dueDate ? " · Due " + task.dueDate : ""} · ${tagsHtml}</div>
+      <div class="task-actions"></div>
+    `;
+    const actions = div.querySelector(".task-actions");
+
+    if (task.status !== "Closed") {
+      const doneBtn = document.createElement("button");
+      doneBtn.className = "btn-done";
+      doneBtn.textContent = "Done";
+      doneBtn.onclick = () => updateTask(task.taskId, { status: "Closed" }).then(refreshTasks);
+      actions.appendChild(doneBtn);
+
+      const snoozeBtn = document.createElement("button");
+      snoozeBtn.className = "btn-snooze";
+      snoozeBtn.textContent = "Snooze 1 day";
+      snoozeBtn.onclick = () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        updateTask(task.taskId, { dueDate: d.toISOString().slice(0, 10) }).then(refreshTasks);
+      };
+      actions.appendChild(snoozeBtn);
+    } else {
+      const reopenBtn = document.createElement("button");
+      reopenBtn.className = "btn-reopen";
+      reopenBtn.textContent = "Reopen";
+      reopenBtn.onclick = () => updateTask(task.taskId, { status: "Open" }).then(refreshTasks);
+      actions.appendChild(reopenBtn);
+    }
+
+    $("taskList").appendChild(div);
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function refreshTasks() {
+  try {
+    const tasks = await listTasks();
+    renderTasks(tasks);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ---- Boot ----
+showApp(!!getToken());
+</script>
+</body>
+</html>
