@@ -15,6 +15,8 @@ const ALLOWED_FIELDS = [
   "contactName",
   "contactPhone",
   "contactEmail",
+  "owner",
+  "notes",
   "lastReminded",
   "callOutcome",
 ];

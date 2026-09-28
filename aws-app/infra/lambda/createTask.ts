@@ -25,6 +25,7 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     contactName: body.contactName ?? null,
     contactPhone: body.contactPhone ?? null,
     contactEmail: body.contactEmail ?? null,
+    owner: body.owner ?? null,
     source: body.source ?? "Manual",
     createdAt: now,
     lastReminded: null,

@@ -3,11 +3,13 @@ import {
   Stack,
   StackProps,
   RemovalPolicy,
+  Duration,
   CfnOutput,
   aws_dynamodb as dynamodb,
   aws_cognito as cognito,
   aws_lambda as lambda,
   aws_apigatewayv2 as apigwv2,
+  aws_iam as iam,
 } from "aws-cdk-lib";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
@@ -89,6 +91,31 @@ export class TaskAgentStack extends Stack {
     });
     tasksTable.grantReadWriteData(updateTaskFn);
 
+    const deleteTaskFn = new NodejsFunction(this, "DeleteTaskFn", {
+      entry: path.join(lambdaDir, "deleteTask.ts"),
+      handler: "handler",
+      runtime: lambda.Runtime.NODEJS_24_X,
+      environment: commonEnv,
+    });
+    tasksTable.grantWriteData(deleteTaskFn);
+
+    // Turns pasted freeform text into structured tasks via Bedrock. Requires
+    // the model to be enabled under Bedrock > Model access in this region --
+    // that's a one-time manual step in the AWS console, not something CDK
+    // can turn on for you.
+    const parseTasksFn = new NodejsFunction(this, "ParseTasksFn", {
+      entry: path.join(lambdaDir, "parseTasks.ts"),
+      handler: "handler",
+      runtime: lambda.Runtime.NODEJS_24_X,
+      timeout: Duration.seconds(30),
+    });
+    parseTasksFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+      })
+    );
+
     // --- API Gateway (HTTP API, Cognito JWT authorizer) ---
     const authorizer = new HttpUserPoolAuthorizer("Authorizer", userPool, {
       userPoolClients: [userPoolClient],
@@ -121,6 +148,20 @@ export class TaskAgentStack extends Stack {
       path: "/tasks/{taskId}",
       methods: [apigwv2.HttpMethod.PATCH],
       integration: new HttpLambdaIntegration("UpdateTaskIntegration", updateTaskFn),
+      authorizer,
+    });
+
+    httpApi.addRoutes({
+      path: "/tasks/{taskId}",
+      methods: [apigwv2.HttpMethod.DELETE],
+      integration: new HttpLambdaIntegration("DeleteTaskIntegration", deleteTaskFn),
+      authorizer,
+    });
+
+    httpApi.addRoutes({
+      path: "/tasks/parse",
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new HttpLambdaIntegration("ParseTasksIntegration", parseTasksFn),
       authorizer,
     });
 

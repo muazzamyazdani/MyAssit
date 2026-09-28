@@ -24,8 +24,9 @@
     color: var(--text);
   }
   .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 80px; }
-  .wrap.wide { max-width: 980px; }
+  .wrap.wide { max-width: 1100px; }
   h1 { font-size: 20px; margin: 0 0 20px; }
+  h2 { font-size: 14px; margin: 0 0 12px; }
   .app-layout { display: flex; gap: 24px; align-items: flex-start; }
   .left-panel { width: 340px; flex-shrink: 0; position: sticky; top: 24px; }
   .right-panel { flex: 1; min-width: 0; }
@@ -50,6 +51,7 @@
     font-size: 14px;
     font-family: inherit;
   }
+  textarea { resize: vertical; min-height: 70px; }
   button {
     cursor: pointer;
     border: none;
@@ -60,44 +62,102 @@
   }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
   .btn-ghost { background: transparent; color: var(--muted); }
   .btn-ghost:hover { color: var(--text); }
+  .btn-link {
+    background: none; color: var(--accent); padding: 0; font-size: 13px; font-weight: 400;
+  }
   .row { display: flex; gap: 8px; margin-top: 16px; }
   .row button { flex: 1; }
-  .task {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    background: var(--card);
-  }
-  .task.closed { opacity: 0.55; }
-  .task-text { font-size: 15px; margin-bottom: 6px; }
-  .task-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-  .tag {
-    display: inline-block;
-    background: #eef2ff;
-    color: #4338ca;
-    border-radius: 999px;
-    padding: 2px 9px;
-    font-size: 12px;
-    margin-right: 4px;
-  }
-  .task-actions { display: flex; gap: 6px; }
-  .task-actions button { font-size: 12px; padding: 6px 10px; }
-  .btn-done { background: #dcfce7; color: #166534; }
-  .btn-snooze { background: #fef3c7; color: #92400e; }
-  .btn-reopen { background: #e0e7ff; color: #3730a3; }
   .error { color: var(--danger); font-size: 13px; margin-top: 10px; }
   .muted { color: var(--muted); font-size: 13px; }
   .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .filters { display: flex; gap: 6px; margin-bottom: 14px; }
-  .filters button { font-size: 12px; padding: 6px 12px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
-  .filters button.active { background: var(--text); color: #fff; border-color: var(--text); }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
   .tab-switch { display: flex; gap: 16px; margin-bottom: 16px; }
   .tab-switch button { background: none; padding: 0 0 6px; border-bottom: 2px solid transparent; color: var(--muted); border-radius: 0; }
   .tab-switch button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* ---- Task list toolbar ---- */
+  .list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .filters { display: flex; gap: 6px; }
+  .filters button { font-size: 12px; padding: 6px 12px; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+  .filters button.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .bulk-actions { display: flex; gap: 6px; margin-left: auto; }
+  .bulk-actions button { font-size: 12px; padding: 6px 10px; }
+  .bulk-actions.hidden { display: none; }
+  .btn-bulk-close { background: #dcfce7; color: #166534; }
+  .btn-bulk-open { background: #e0e7ff; color: #3730a3; }
+  .btn-bulk-delete { background: #fee2e2; color: #991b1b; }
+
+  /* ---- Notepad-style task list ---- */
+  .task-list-container {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    max-height: 560px;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+  .select-all-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+    font-size: 12px;
+    color: var(--muted);
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+  .task-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    font-size: 14px;
+  }
+  .task-row:last-child { border-bottom: none; }
+  .task-row.selected { background: #eff6ff; }
+  .task-row input[type="checkbox"] { flex-shrink: 0; width: 15px; height: 15px; }
+  .task-text {
+    flex-shrink: 0;
+    min-width: 180px;
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-row.closed .task-text { text-decoration: line-through; color: var(--muted); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .badge-due { background: #fef3c7; color: #92400e; }
+  .badge-tag { background: #eef2ff; color: #4338ca; }
+  .badge-owner { background: #f0fdf4; color: #15803d; }
+  .badge-status { background: #f3f4f6; color: var(--muted); }
+  .row-actions { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
+  .row-actions button { font-size: 11px; padding: 4px 8px; }
+  .btn-done { background: #dcfce7; color: #166534; }
+  .btn-snooze { background: #fef3c7; color: #92400e; }
+  .btn-reopen { background: #e0e7ff; color: #3730a3; }
+  .btn-delete { background: transparent; color: var(--danger); padding: 4px 6px; }
+  .empty-state { padding: 24px 14px; text-align: center; }
 </style>
 </head>
 <body>
@@ -154,28 +214,59 @@
 
     <div class="app-layout">
       <div class="left-panel">
+        <!-- Quick add: one task at a time, all fields optional except the task itself -->
         <div class="card">
+          <h2>Quick add</h2>
           <label>Task</label>
           <input id="newTaskText" placeholder="e.g. Call Sajid and ask for update" />
-          <label>Tags (comma-separated)</label>
+          <label>#Tags (comma-separated, optional)</label>
           <input id="newTaskTags" placeholder="e.g. finance, procurement" />
-          <label>Due date</label>
+          <label>Due date (optional)</label>
           <input id="newTaskDue" type="date" />
+          <label>Owner (optional)</label>
+          <input id="newTaskOwner" placeholder="e.g. Sajid" />
+          <div id="extraFields"></div>
+          <button class="btn-link" id="addFieldBtn" type="button" style="margin-top:10px;">+ Add field (Notes)</button>
           <div class="row">
             <button class="btn-primary" id="addTaskBtn">Add task</button>
           </div>
           <div class="error hidden" id="addError"></div>
         </div>
+
+        <!-- Paste one or many tasks; AI splits, dates, and tags them -->
+        <div class="card">
+          <h2>Paste tasks</h2>
+          <label>Paste one task or a whole list/note (dates and #tags are picked up automatically)</label>
+          <textarea id="pasteText" placeholder="e.g. Follow up with supplier by Friday. Send Sajid the finance report."></textarea>
+          <div class="row">
+            <button class="btn-primary" id="parseBtn">Parse &amp; add</button>
+          </div>
+          <div class="muted" id="parseStatus" style="margin-top:8px;"></div>
+          <div class="error hidden" id="parseError"></div>
+        </div>
       </div>
 
       <div class="right-panel">
-        <div class="filters">
-          <button class="filter-btn active" data-filter="open">Open</button>
-          <button class="filter-btn" data-filter="all">All</button>
+        <div class="list-toolbar">
+          <div class="filters">
+            <button class="filter-btn active" data-filter="open">Open</button>
+            <button class="filter-btn" data-filter="all">All</button>
+          </div>
+          <div class="bulk-actions hidden" id="bulkActions">
+            <button class="btn-bulk-close" id="bulkCloseBtn">Close</button>
+            <button class="btn-bulk-open" id="bulkOpenBtn">Reopen</button>
+            <button class="btn-bulk-delete" id="bulkDeleteBtn">Delete</button>
+          </div>
         </div>
 
-        <div id="taskList"></div>
-        <p class="muted" id="emptyState" style="display:none;">No tasks here yet.</p>
+        <div class="task-list-container">
+          <div class="select-all-row">
+            <input type="checkbox" id="selectAllCheckbox" />
+            <span id="selectionLabel">Select all</span>
+          </div>
+          <div id="taskList"></div>
+          <p class="muted empty-state hidden" id="emptyState">No tasks here yet.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -248,6 +339,7 @@ async function apiRequest(path, method, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) { showApp(false); throw new Error("Session expired, please sign in again."); }
+  if (res.status === 204) return null;
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
@@ -256,10 +348,13 @@ async function apiRequest(path, method, body) {
 const listTasks = () => apiRequest("/tasks", "GET");
 const createTask = (task) => apiRequest("/tasks", "POST", task);
 const updateTask = (taskId, patch) => apiRequest(`/tasks/${taskId}`, "PATCH", patch);
+const deleteTask = (taskId) => apiRequest(`/tasks/${taskId}`, "DELETE");
+const parseTasksWithAI = (text) => apiRequest("/tasks/parse", "POST", { text });
 
 // ---- UI wiring ----
 const $ = (id) => document.getElementById(id);
 let currentFilter = "open";
+let selectedIds = new Set();
 
 function showError(id, message) {
   const el = $(id);
@@ -338,20 +433,71 @@ $("confirmBtn").onclick = async () => {
 
 $("logoutBtn").onclick = () => { clearSession(); showApp(false); };
 
+// "+ Add field" -- a starting point for the fully-customizable fields idea;
+// for now it reveals one extra optional field (Notes). More can be added
+// the same way later.
+let notesFieldAdded = false;
+$("addFieldBtn").onclick = () => {
+  if (notesFieldAdded) return;
+  notesFieldAdded = true;
+  $("extraFields").innerHTML = `
+    <label>Notes (optional)</label>
+    <input id="newTaskNotes" placeholder="Any extra detail" />
+  `;
+  $("addFieldBtn").classList.add("hidden");
+};
+
 $("addTaskBtn").onclick = async () => {
   hideError("addError");
   const taskText = $("newTaskText").value.trim();
   if (!taskText) { showError("addError", "Task text is required."); return; }
-  const tags = $("newTaskTags").value.split(",").map((t) => t.trim()).filter(Boolean);
+  const tags = $("newTaskTags").value.split(",").map((t) => t.trim().replace(/^#/, "")).filter(Boolean);
   const dueDate = $("newTaskDue").value || null;
+  const owner = $("newTaskOwner").value.trim() || null;
+  const notesInput = $("newTaskNotes");
+  const notes = notesInput ? notesInput.value.trim() || null : null;
   try {
-    await createTask({ taskText, tags, dueDate, source: "Manual" });
+    await createTask({ taskText, tags, dueDate, owner, notes, source: "Manual" });
     $("newTaskText").value = "";
     $("newTaskTags").value = "";
     $("newTaskDue").value = "";
+    $("newTaskOwner").value = "";
+    if (notesInput) notesInput.value = "";
     refreshTasks();
   } catch (err) {
     showError("addError", err.message);
+  }
+};
+
+$("parseBtn").onclick = async () => {
+  hideError("parseError");
+  const text = $("pasteText").value.trim();
+  if (!text) { showError("parseError", "Paste something first."); return; }
+  $("parseBtn").disabled = true;
+  $("parseStatus").textContent = "Reading and splitting into tasks...";
+  try {
+    const { tasks } = await parseTasksWithAI(text);
+    if (!tasks || tasks.length === 0) {
+      $("parseStatus").textContent = "No tasks found in that text.";
+      return;
+    }
+    for (const t of tasks) {
+      await createTask({
+        taskText: t.taskText,
+        tags: (t.tags || []).map((tag) => tag.replace(/^#/, "")),
+        dueDate: t.dueDate || null,
+        owner: t.owner || null,
+        source: "Manual",
+      });
+    }
+    $("parseStatus").textContent = `Added ${tasks.length} task${tasks.length === 1 ? "" : "s"}.`;
+    $("pasteText").value = "";
+    refreshTasks();
+  } catch (err) {
+    showError("parseError", err.message);
+    $("parseStatus").textContent = "";
+  } finally {
+    $("parseBtn").disabled = false;
   }
 };
 
@@ -360,28 +506,97 @@ document.querySelectorAll(".filter-btn").forEach((btn) => {
     document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentFilter = btn.dataset.filter;
+    selectedIds.clear();
     renderTasks(window.__tasks || []);
   };
 });
 
+$("selectAllCheckbox").onchange = (e) => {
+  const visible = getVisibleTasks();
+  if (e.target.checked) visible.forEach((t) => selectedIds.add(t.taskId));
+  else selectedIds.clear();
+  renderTasks(window.__tasks || []);
+};
+
+$("bulkCloseBtn").onclick = () => bulkUpdate({ status: "Closed" });
+$("bulkOpenBtn").onclick = () => bulkUpdate({ status: "Open" });
+$("bulkDeleteBtn").onclick = async () => {
+  if (!confirm(`Delete ${selectedIds.size} task(s)? This can't be undone.`)) return;
+  for (const id of selectedIds) await deleteTask(id);
+  selectedIds.clear();
+  refreshTasks();
+};
+
+async function bulkUpdate(patch) {
+  for (const id of selectedIds) await updateTask(id, patch);
+  selectedIds.clear();
+  refreshTasks();
+}
+
+function getVisibleTasks() {
+  const tasks = window.__tasks || [];
+  return currentFilter === "open" ? tasks.filter((t) => t.status !== "Closed") : tasks;
+}
+
 function renderTasks(tasks) {
   window.__tasks = tasks;
-  const visible = currentFilter === "open" ? tasks.filter((t) => t.status !== "Closed") : tasks;
+  const visible = getVisibleTasks();
   visible.sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
 
   $("taskList").innerHTML = "";
-  $("emptyState").style.display = visible.length ? "none" : "block";
+  $("emptyState").classList.toggle("hidden", visible.length !== 0);
+
+  $("bulkActions").classList.toggle("hidden", selectedIds.size === 0);
+  $("selectionLabel").textContent = selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all";
+  $("selectAllCheckbox").checked = visible.length > 0 && visible.every((t) => selectedIds.has(t.taskId));
 
   visible.forEach((task) => {
-    const div = document.createElement("div");
-    div.className = "task" + (task.status === "Closed" ? " closed" : "");
-    const tagsHtml = (task.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
-    div.innerHTML = `
-      <div class="task-text">${escapeHtml(task.taskText)}</div>
-      <div class="task-meta">${task.status}${task.dueDate ? " · Due " + task.dueDate : ""} · ${tagsHtml}</div>
-      <div class="task-actions"></div>
-    `;
-    const actions = div.querySelector(".task-actions");
+    const row = document.createElement("div");
+    row.className = "task-row" + (task.status === "Closed" ? " closed" : "") + (selectedIds.has(task.taskId) ? " selected" : "");
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedIds.has(task.taskId);
+    checkbox.onchange = () => {
+      if (checkbox.checked) selectedIds.add(task.taskId);
+      else selectedIds.delete(task.taskId);
+      renderTasks(window.__tasks || []);
+    };
+    row.appendChild(checkbox);
+
+    const textSpan = document.createElement("span");
+    textSpan.className = "task-text";
+    textSpan.textContent = task.taskText;
+    row.appendChild(textSpan);
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "badge badge-status";
+    statusBadge.textContent = task.status;
+    row.appendChild(statusBadge);
+
+    if (task.dueDate) {
+      const dueBadge = document.createElement("span");
+      dueBadge.className = "badge badge-due";
+      dueBadge.textContent = "Due " + task.dueDate;
+      row.appendChild(dueBadge);
+    }
+
+    if (task.owner) {
+      const ownerBadge = document.createElement("span");
+      ownerBadge.className = "badge badge-owner";
+      ownerBadge.textContent = "@" + task.owner;
+      row.appendChild(ownerBadge);
+    }
+
+    (task.tags || []).forEach((tag) => {
+      const tagBadge = document.createElement("span");
+      tagBadge.className = "badge badge-tag";
+      tagBadge.textContent = "#" + tag;
+      row.appendChild(tagBadge);
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
 
     if (task.status !== "Closed") {
       const doneBtn = document.createElement("button");
@@ -392,7 +607,7 @@ function renderTasks(tasks) {
 
       const snoozeBtn = document.createElement("button");
       snoozeBtn.className = "btn-snooze";
-      snoozeBtn.textContent = "Snooze 1 day";
+      snoozeBtn.textContent = "Snooze";
       snoozeBtn.onclick = () => {
         const d = new Date();
         d.setDate(d.getDate() + 1);
@@ -407,14 +622,18 @@ function renderTasks(tasks) {
       actions.appendChild(reopenBtn);
     }
 
-    $("taskList").appendChild(div);
-  });
-}
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn-delete";
+    deleteBtn.textContent = "✕";
+    deleteBtn.title = "Delete";
+    deleteBtn.onclick = () => {
+      if (confirm("Delete this task?")) deleteTask(task.taskId).then(refreshTasks);
+    };
+    actions.appendChild(deleteBtn);
 
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+    row.appendChild(actions);
+    $("taskList").appendChild(row);
+  });
 }
 
 async function refreshTasks() {
