@@ -4,7 +4,7 @@ import type { APIGatewayProxyHandlerV2WithJWTAuthorizer } from "aws-lambda";
 const bedrock = new BedrockRuntimeClient({});
 // Override via the BEDROCK_MODEL_ID env var if this model isn't enabled/available
 // in your account's Bedrock "Model access" page for this region.
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
 const SYSTEM_PROMPT = `You turn pasted, freeform text (notes, meeting minutes, a to-do list, a forwarded message) into a list of individual tasks.
 
