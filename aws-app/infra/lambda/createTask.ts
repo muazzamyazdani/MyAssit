@@ -15,13 +15,12 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
   }
 
   const now = new Date().toISOString();
-  const task = {
+  const task: Record<string, unknown> = {
     userId,
     taskId: randomUUID(),
     taskText: body.taskText,
     tags: Array.isArray(body.tags) ? body.tags : [],
     status: body.status ?? "Open",
-    dueDate: body.dueDate ?? null,
     contactName: body.contactName ?? null,
     contactPhone: body.contactPhone ?? null,
     contactEmail: body.contactEmail ?? null,
@@ -31,6 +30,12 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
     lastReminded: null,
     callOutcome: null,
   };
+
+  // The byDueDate GSI's sort key must be a real string when present -- DynamoDB
+  // rejects a NULL value there, so a missing due date just omits the attribute.
+  if (body.dueDate) {
+    task.dueDate = body.dueDate;
+  }
 
   await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: task }));
 
