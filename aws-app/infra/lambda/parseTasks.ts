@@ -15,8 +15,8 @@ Rules:
 - For each task, extract a due date ONLY if one is stated or clearly implied (e.g. "by Friday", "tomorrow", "Oct 5"). Resolve relative dates using today's date, given below. If no date is mentioned, use null -- do not guess one.
 - Generate 1-3 short, lowercase, single-word-or-hyphenated tags per task that categorize it (e.g. "finance", "procurement", "follow-up"). No "#" prefix in the output -- that's added by the UI.
 - If a person's name is clearly responsible for or mentioned as the owner of the task, extract it as "owner"; otherwise null.
-- Reply with ONLY a JSON array, no prose, no markdown fences. Example:
-[{"taskText": "Call Sajid for a delivery update", "dueDate": "2026-10-01", "tags": ["procurement"], "owner": "Sajid"}]`;
+- Reply with ONLY a JSON array, no prose, no markdown fences. This example shows the required shape only -- it is not related to the real input below, which always has its own separate content to extract from:
+[{"taskText": "Email Jordan a delivery update", "dueDate": "2025-01-15", "tags": ["logistics"], "owner": "Jordan"}]`;
 
 function extractJsonArray(text: string): unknown[] {
   const trimmed = text.trim().replace(/^```json\s*/i, "").replace(/```$/, "").trim();
