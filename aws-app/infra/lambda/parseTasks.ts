@@ -4,7 +4,9 @@ import type { APIGatewayProxyHandlerV2WithJWTAuthorizer } from "aws-lambda";
 const bedrock = new BedrockRuntimeClient({});
 // Override via the BEDROCK_MODEL_ID env var if this model isn't enabled/available
 // in your account's Bedrock "Model access" page for this region.
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+// Amazon's own Nova models bill directly through AWS (no AWS Marketplace
+// subscription step required), unlike third-party models such as Anthropic's.
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || "amazon.nova-2-lite-v1:0";
 
 const SYSTEM_PROMPT = `You turn pasted, freeform text (notes, meeting minutes, a to-do list, a forwarded message) into a list of individual tasks.
 
