@@ -11,7 +11,7 @@ const MODEL_ID = process.env.BEDROCK_MODEL_ID || "us.amazon.nova-2-lite-v1:0";
 const SYSTEM_PROMPT = `You turn pasted, freeform text (notes, meeting minutes, a to-do list, a forwarded message) into a list of individual tasks.
 
 Rules:
-- Split the input into one entry per distinct task/action item. A single sentence is usually one task; a list or paragraph may contain several.
+- Split the input into one entry per distinct task/action item. A single sentence is usually one task; a list or paragraph may contain several. Even if the whole input describes just one task, return an array with exactly one element -- never return an empty array unless the input truly contains no actionable task at all.
 - For each task, extract a due date ONLY if one is stated or clearly implied (e.g. "by Friday", "tomorrow", "Oct 5"). Resolve relative dates using today's date, given below. If no date is mentioned, use null -- do not guess one.
 - Generate 1-3 short, lowercase, single-word-or-hyphenated tags per task that categorize it (e.g. "finance", "procurement", "follow-up"). No "#" prefix in the output -- that's added by the UI.
 - If a person's name is clearly responsible for or mentioned as the owner of the task, extract it as "owner"; otherwise null.
