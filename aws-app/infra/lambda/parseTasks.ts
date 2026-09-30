@@ -45,7 +45,11 @@ export const handler: APIGatewayProxyHandlerV2WithJWTAuthorizer = async (event) 
       })
     );
 
-    const raw = response.output?.message?.content?.[0]?.text || "[]";
+    // Nova's hybrid-reasoning models can put a "reasoning" block before the
+    // actual answer, so content[0] isn't reliably the text -- scan for it.
+    const content = response.output?.message?.content ?? [];
+    const raw = content.find((block) => typeof block.text === "string")?.text || "[]";
+    console.log("Bedrock raw response:", JSON.stringify(content));
     const tasks = extractJsonArray(raw);
 
     return { statusCode: 200, body: JSON.stringify({ tasks }) };
